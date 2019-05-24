@@ -1,0 +1,264 @@
+---
+title: "Implications financieres des choix de filieres"
+author: "Afouda Josue"
+date: "24 mai 2019"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(readr)
+library(factoextra)
+library(cluster)
+setwd("D:/DATASCIENTIST_LEARNING/DATACAMP.COM/Projetcs/Degrees_That_Pay_You_Back")
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Partie 1 : Définition et Contexte
+
+## 1.1 Définition du problème et Objectif du Projet
+
+Le choix d’une filière d'étude est une décision complexe qui évalue l’intérêt personnel, les difficultés et les perspectives de carrière. Votre premier salaire dès la fin de vos études pourrait en dire long sur votre potentiel salarial à la mi-carrière. Que vous soyez à l’école ou en train de naviguer dans le monde de la formation postdoctorale, joignez-vous à moi pour explorer les implications financières à court et à long terme de cette décision majeure. A l'ère de la *Data Science*, les lycéens/étudiants peuvent bénéficier d'une analyse minutieuse des données, les aidant à choisir leur filière d'étude.
+
+L'objectif de ce projet est d'appliquer une analyse par regroupement k-means afin de déterminer les groupes de filières semblables par rapport aux projections salariales. Trois méthodes différentes seront utilisées pour déterminer le nombre optimal de groupes dans nos données avant d'appliquer l'algorithme k-means et de visualiser les résultats.
+
+L'idée est de vous faire des recommandations sur les filières d’études qui paieront vos factures :) et vous donneront la sécurité financière.
+
+
+## 1.2 Compétences techniques et libraries utilisées
+
+Pour réaliser ce projet, j'ai mis en oeuvre mes compétences en :
+
+* **Importation et Nettoyage de données** - Vous pouvez consulter les cours [Importing & Cleaning Data with R](https://www.datacamp.com/tracks/importing-cleaning-data-with-r) de [DATACAMP](www.datacamp.com).
+
+* **Visualisation de données** - Vous pouvez apprendre cette compétence à travers les cours [Data Visualization with R](https://www.datacamp.com/tracks/data-visualization-with-r).
+
+* **Machine Learning** - Consulter les cours sur [Machine Learning](https://www.datacamp.com/tracks/machine-learning-fundamentals?version=1).
+
+* **Reporting** - Vous pouvez réaliser le cours [Reporting with R Markdown](https://www.datacamp.com/courses/reporting-with-r-markdown)
+
+Il existe une multitude de plateformes *e-learning* sur le net à partir desquelles on peut apprendre les compétences techniques indispensables pour un Data Scientist ou un Data Analyst. 
+
+Les libraries de *R* utilisées dans le cadre de ce projet sont : [tidyverse](https://www.datacamp.com/tracks/tidyverse-fundamentals?version=1) qui inclut [dplyr](https://www.rdocumentation.org/packages/dplyr), [tidyr](https://www.rdocumentation.org/packages/tidyr) et [ggplot2](https://www.rdocumentation.org/packages/ggplot2) ; [factoextra](https://www.rdocumentation.org/packages/factoextra) ; [readr](https://www.rdocumentation.org/packages/readr) et  [cluster](https://www.rdocumentation.org/packages/cluster)
+
+
+# Partie 2 : Les données
+
+Les données utilisées dans ce projet sont celles de [PayScale Inc.]( https://www.payscale.com/) dans le cadre d'une enquête d'un an auprès de 1,2 million de personnes titulaires d'un baccalauréat, disponible ici par le [Wall Street Journal]( https://www.wsj.com/europe) pour leur article [Big Edge d'Ivy League: Starting Pay](http://online.wsj.com/public/resources/documents/info-Degrees_that_Pay_you_Back-sort.html?mod=article_inline).
+
+## 2.1 Vue d'ensemble des données
+
+```{r, message=FALSE}
+
+salary <- read_csv("datasets/degrees-that-pay-back.csv")
+str(salary)
+
+```
+
+On constate que les valeurs (salaires) sont en caractères précédées du symbole du dollar. Ceci ne facilitera pas les manipulations. Il faudra donc convertir toutes les colonnes en valeurs numériques sauf la première colonne. De plus, nous allons renommer les colonnes.
+
+## 2.2 Nettoyage des données
+
+```{r, message=FALSE}
+
+salary <- read_csv("datasets/degrees-that-pay-back.csv", skip = 1, col_names = c(
+'Undergraduate.Major', 'Starting.Median.Salary', 'Mid.Career.Median.Salary', 'Career.Percent.Growth', 'Mid.Career.10th.Percentile', 'Mid.Career.25th.Percentile', 'Mid.Career.75th.Percentile', 'Mid.Career.90th.Percentile'))
+
+salary_clean <- salary %>% 
+    mutate_at(vars(Starting.Median.Salary : Mid.Career.90th.Percentile), 
+              function(x) as.numeric(gsub('[\\$,]',"",x))) %>%
+    mutate(Career.Percent.Growth = Career.Percent.Growth / 100)
+
+str(salary_clean)
+
+```
+
+Voilà qui est bien mieux ! :)
+
+# Partie 3 : Analyse par regroupement kmeans
+
+L'algorithme est un algorithme de classification qui permet de trouver des sous-groupes (*clusters*) homogènes dans un grand ensemble. Il fait partie de l'apprentissage non supervisée dans une perspective de *Machine Learning*. L'idée basique des méthodes de regroupement (ou de partitionnement) est de définir des groues de telle sorte sorte que la variation inter-groupe (en anglais, c'est le *"total within sum of square"*) soit minimisée.
+Pour appliquer cet algorithme aux données, il faudra d’abord normaliser ces données. 
+
+```{r, message=FALSE}
+
+k_means_data <- salary_clean %>%
+#Sélection des variables pour effectuer les regroupements
+  select(Starting.Median.Salary, Mid.Career.Median.Salary, Mid.Career.10th.Percentile, Mid.Career.90th.Percentile) %>%
+  scale()
+
+```
+
+
+Sauf dans certains cas précis, on ne connait pas souvent davance le nombre de groupes.Trois méthodes (Méthode du coude, Méthode de la silhouette, Méthode statistique des écarts) seront utilisées afin de déterminer le meilleur nombre de groupes à modéliser. Trouver [ici](https://www.datanovia.com/en/lessons/determining-the-optimal-number-of-clusters-3-must-know-methods/) des explications claires sur ces méthodes.
+
+## 3.1 Méthode du "coude" (Elbow method)
+
+Si on ne connait pas d'avance le nombre de groupes (*k*) et qu'on veut le déterminer, il faudra exécuter plusieurs fois l'algorithme avec un nombre de groupes différent à chaque exécution (*k = 1 à 10* par exemple). Ainsi, on observe comment la mesure de la qualité du modèle change en fonction du nombre de groupes.
+
+Le nombre de groupes optimal est celui à partir duquel on observe plus d'amélioration sensible de la qualité du modèle (c'est-à-dire le *"total within sum of square"*) au fur et à mesure que le *k* augmente (le modèle est exécuté pour *k = 1 à 10* par exemple).
+
+En d'autres termes, le meilleur *k* est celui où on observe une coude au niveau de la courbe *total within sum of square* en fonction de *Number of clusters k*
+
+```{r, message=FALSE}
+
+elbow_method <- fviz_nbclust(k_means_data, FUNcluster = kmeans, method = "wss")
+elbow_method
+
+```
+
+L'analyse de cette courbe suggère de considérer trois groupes. Passons à la méthode de la silhouette.
+
+## 3.2 Méthode de la silhouette moyenne
+
+En résumé, cette méthode mesure à quel point chaque individu est intégrée dans son groupe. Une largeur de silhouette moyenne élevée indique un bon regroupement.
+
+La méthode de la silhouette moyenne calcule la silhouette moyenne des observations pour différentes valeurs de *k*. Le nombre optimal de groupes *k* est celui qui maximise la silhouette moyenne sur une plage de valeurs possibles pour *k*.
+
+```{r, message=FALSE}
+
+silhouette_method <- fviz_nbclust(k_means_data, FUNcluster = kmeans, method = "silhouette")
+silhouette_method
+
+```
+
+Cette méthode de la silhouette moyenne nous suggère donc de considérer 2 groupes. Passons à la troisième méthode.
+
+## 3.3 La statistique des écarts
+
+La statistique d'écart compare le total de la variation intra-groupe pour différentes valeurs de *k* avec les valeurs attendues dans la distribution de référence nulle des données. L'estimation du nombre optimal de groupes sera une valeur qui maximisera la statistique d'écart (c'est-à-dire qui produit la statistique d'écart la plus grande).
+
+```{r, message=FALSE}
+
+gap_method <- fviz_nbclust(k_means_data, FUNcluster = kmeans, method = "gap_stat")
+gap_method
+
+```
+
+Cette dernière méthode nous suggère de considérer 3 groupes pour notre analyse.
+
+En considérant la règle de la majorité :) (Vive la démocratie !), l'analyse kmeans sera effectuée avec k égal à 3.
+
+## 3.4 Regroupement par kmeans avec k = 3
+
+```{r, message=FALSE}
+#On s'assure de la reproductibilité des résultats à chaque exécution du code
+set.seed(1111)
+
+#Analyse k_means
+k_means <- kmeans(k_means_data, centers = 3, iter.max = 15, nstart = 25)
+
+#Données regroupées
+salary_clustering <- salary_clean %>%
+  mutate(clusters = k_means$cluster)
+
+#Visualisation
+Mid.Career_VS_Starting <- salary_clustering %>%
+  ggplot(aes(Starting.Median.Salary, Mid.Career.Median.Salary, color = factor(clusters))) + geom_point(alpha = 4/5, size = 6) + 
+  scale_color_manual(name = "Clusters", values = c("red", "yellow", "blue")) +
+  scale_x_continuous(labels = scales::dollar) +
+  scale_y_continuous(labels = scales::dollar) +
+  ggtitle("clusters by Starting and Mid Career Median Salaries")
+
+Mid.Career_VS_Starting
+
+```
+
+Les 3 groupes montrent qu’il existe une relation relativement linéaire entre le salaire médian de départ et celui de mi-carrière. Autrement dit, plus votre salaire de départ est élevé, plus votre salaire de mi-carrière sera élevé.
+
+On remarque aussi quelques points très éloignées (*outliers*) au niveau des groupes 1 et 3. Il faudra donc examiner profondément le contenu de chaque groupe afin de comprendre ce qu’il en est de ces outliers. Il va falloir représenter chaque groupe afin de l'examiner profondément. Pour ce faire, le jeu de donné sera mis sous un format long (fonction [gather](https://www.rdocumentation.org/packages/tidyr/versions/0.8.3/topics/gather)).
+
+```{r, message=FALSE}
+
+# Jeu de données en format long
+salary_gathered <- salary_clustering %>%
+  select(-c(Starting.Median.Salary, Career.Percent.Growth)) %>%
+  gather(key = percentile, value = salary, -c(Undergraduate.Major, clusters)) %>%
+  mutate(percentile = factor(percentile, levels = c("Mid.Career.10th.Percentile", "Mid.Career.25th.Percentile", "Mid.Career.Median.Salary", "Mid.Career.75th.Percentile", "Mid.Career.90th.Percentile")))
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+
+# Représentation graphique du cluster 1
+
+cluster_1 <- salary_gathered %>%
+  filter(clusters ==  1) %>%
+  ggplot(aes(percentile, salary, color = Undergraduate.Major, group = Undergraduate.Major)) + 
+  geom_point() +
+  geom_line() +
+  ggtitle("Cluster 1 : Les arts libéraux") +
+  theme(legend.position="bottom", axis.text.x = element_text(size=7, angle=25))
+
+cluster_1
+
+```
+
+Le groupe 1 est celui des Arts libéraux avec des opportunités de croissance limitées. La musique est le choix le plus risqué avec le salaire le plus bas au 10e centile, mais l’Art dramatique gagne le potentiel de croissance le plus élevé du 90e centile pour ce groupe (alors les rêves hollywoodiens ont de l’espoir!). L’Infirmerie est l’outlier et le premier de ce groupe avec un filet de sécurité plus élevé dans le centile inférieur de la médiane. Il est intéressant de noter que la plupart de ces types de carrières du groupe 1 menant à des emplois moins rémunérés sont à prédominance féminine, selon cette [étude de Glassdoor]( https://www.glassdoor.com/research/app/uploads/sites/2/2017/04/FULL-STUDY-PDF-Gender-Pay-Gap2FCollege-Major.pdf). La question est de savoir si les femmes choisissent statistiquement des métiers à potentiel salarial inférieur ou que certains emplois sont moins rémunérateurs parce que les femmes les choisissent ! Cela interpelle une fois encore sur la question de l’égalité des genres.
+
+
+```{r, message=FALSE, warning=FALSE}
+
+# Représentation graphique du cluster 2
+
+cluster_2 <- salary_gathered %>%
+  filter(clusters ==  2) %>%
+  ggplot(aes(percentile, salary, color = Undergraduate.Major, group = Undergraduate.Major)) + 
+  geom_point() +
+  geom_line() +
+  ggtitle("Cluster 2") +
+  theme(legend.position="bottom", axis.text.x = element_text(size=7, angle=25))
+
+cluster_2
+
+```
+
+Le groupe 2 est le groupe d’or. Ils sont stables. Les comptables sont réputés pour leur sécurité d'emploi stable. Les filières de ce groupe sont assez à mi-chemin dans notre ensemble de données, démarrant pas trop bas et pas trop haut dans le centile le plus bas. Cependant, ce groupe représente également les filières avec le plus grand différentiel entre les centiles le plus bas et le plus élevé.
+
+```{r}
+
+# Représentation graphique du cluster 3
+
+cluster_3 <- salary_gathered %>%
+  filter(clusters ==  3) %>%
+  ggplot(aes(percentile, salary, color = Undergraduate.Major, group = Undergraduate.Major)) + 
+  geom_point() +
+  geom_line() +
+  ggtitle("Cluster 3 : Groupe des poids lourds") +
+  theme(legend.position="bottom", axis.text.x = element_text(size=7, angle=25))
+
+cluster_3
+
+```
+
+Le groupe 3 est le groupe le plus performant. Si vous souhaitez une sécurité financière, vous devez choisir parmi ces filières. Ces poids lourds en Ingénierie représentent le potentiel de croissance le plus élevé au 90e centile, ainsi que la meilleure sécurité au 10e centile. 
+
+# Partie 4 : Conclusion
+
+Au cours de cette étude, nous avons exploré les projections salariales de différents types de filières par l’intermédiaire d’une analyse par regroupement appelée k-means. Nous avons utilisé trois différentes méthodes pour déterminer le nombre optimal de groupes et analyser profondément ces groupes par des visualisations.
+
+Bien qu'il soit tentant de se concentrer sur les salaires de début de carrière au moment de choisir une filière, il est important de prendre également en compte le potentiel de croissance à venir. Gardez à l’esprit que, pour n'importe quelle filière d'étude, de nombreux autres facteurs comme l’école fréquentée, le lieu, la passion ou le talent du sujet, influencent le destin financier d’une personne dans sa carrière.
+
+Pour faire plus simple, trouvez ci-dessous, les cinq filières ayant le plus fort potentiel de croissance salariale de début de carrière  mi-carrière.
+
+```{r}
+
+arrange(salary_clean, desc(Career.Percent.Growth))
+
+highest_career_growth <- c('Math','Philosophy', 'International Relations', 'Economics', 'Marketing')
+
+```
+
+Les Mathématiques, pas du tout surpris que cette filière vienne en première position puisqu'elle offre d'inombrables des débouchés. Mais la Philosophie.... Bon, on sait que les bons Mathématiciens sont de bons philosophes et peut-être même que la réciproque est aussi vraie :)
+
+
+
+
+
+
+
+
