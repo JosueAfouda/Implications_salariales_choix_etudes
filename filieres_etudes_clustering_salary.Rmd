@@ -14,7 +14,6 @@ library(tidyverse)
 library(readr)
 library(factoextra)
 library(cluster)
-setwd("D:/DATASCIENTIST_LEARNING/DATACAMP.COM/Projetcs/Degrees_That_Pay_You_Back")
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -54,7 +53,7 @@ Les données utilisées dans ce projet sont celles de [PayScale Inc.]( https://w
 
 ```{r, message=FALSE}
 
-salary <- read_csv("datasets/degrees-that-pay-back.csv")
+salary <- read_csv("degrees-that-pay-back.csv")
 str(salary)
 
 ```
@@ -65,7 +64,7 @@ On constate que les valeurs (salaires) sont en caractères précédées du symbo
 
 ```{r, message=FALSE}
 
-salary <- read_csv("datasets/degrees-that-pay-back.csv", skip = 1, col_names = c(
+salary <- read_csv("degrees-that-pay-back.csv", skip = 1, col_names = c(
 'Undergraduate.Major', 'Starting.Median.Salary', 'Mid.Career.Median.Salary', 'Career.Percent.Growth', 'Mid.Career.10th.Percentile', 'Mid.Career.25th.Percentile', 'Mid.Career.75th.Percentile', 'Mid.Career.90th.Percentile'))
 
 salary_clean <- salary %>% 
